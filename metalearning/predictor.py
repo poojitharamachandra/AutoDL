@@ -1,5 +1,8 @@
-import xgboost as xgb
+import sys
 import os
+sys.path.append(os.path.join(os.getcwd(), 'ingestion'))
+sys.path.append(os.path.join(os.getcwd(), 'scoring'))
+import xgboost as xgb
 from dataset import AutoSpeechDataset
 import pandas as pd
 import torch
@@ -16,10 +19,15 @@ from sklearn import mixture
 from meta import extract_mfcc
 from meta import pad_seq
 from meta import get_meta_features
+import matplotlib.pyplot as plt
+#sys.path.append('../')
+import extract_best_model
+import run_local_test
 def get_data(path):
     #dirs=['espeak-starcraft-words']
     dirs = os.listdir(path)
     meta_features=[]
+    #dirs=['data03']
     for d in dirs:
         print(d)
         p = os.path.join(path,d)
@@ -45,7 +53,7 @@ def get_data(path):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print(x_data.shape)
         x_data = torch.from_numpy(x_data).float().to(device)
-        data = get_meta_features(x_data,d)
+        data = get_meta_features(x_data,d,max_len)
         meta_features.append(data)
     return meta_features
 
@@ -53,18 +61,15 @@ def get_data(path):
 
 
 
-df = pd.read_csv("./data_256.csv", header=0)#,delimiter=" ")
-idx = df[(df.name == "music_genre")].index
-#print(idx)
+df = pd.read_csv("./ingestion/data_256.csv", header=0)#,delimiter=" ")
+idx = df[(df.name == "flickr")].index
+
 dfa = df
-#df = df.drop(idx)
-#models = range(0,16)
-#print(df)
-
-X = df[['mean','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13','skew_1','skew_2','skew_3','skew_4','skew_5','skew_6','skew_7','skew_8','skew_9','skew_10','skew_11','skew_12','skew_13','kurtosis_1','kurtosis_2','kurtosis_3','kurtosis_4','kurtosis_5','kurtosis_6','kurtosis_7','kurtosis_8','kurtosis_9','kurtosis_10','kurtosis_11','kurtosis_12','kurtosis_13']]
+df = df.drop(idx)
 
 
-#X = df[['mean','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13']]
+X = df[['mean','seq_length','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13','skew_1','skew_2','skew_3','skew_4','skew_5','skew_6','skew_7','skew_8','skew_9','skew_10','skew_11','skew_12','skew_13','kurtosis_1','kurtosis_2','kurtosis_3','kurtosis_4','kurtosis_5','kurtosis_6','kurtosis_7','kurtosis_8','kurtosis_9','kurtosis_10','kurtosis_11','kurtosis_12','kurtosis_13']]
+
 
 y = df[['name']]
 #print(y.loc[200]['name'])
@@ -75,34 +80,13 @@ l = [y.loc[i]['name'] for i in idx]
 print(list(set(l)))
 u = list(set(l))
 print(u)
-labels = {u[i]:i for i in range(len(u))}
+labels = {i:u[i] for i in range(len(u))}
 print(labels)
 #y = np.squeeze(np.eye(len(labels), dtype=int)[labels[y['name']]])
-'''p=[]
-for i in range (len(y)):
-   p.append(labels[y.loc[i]['name']])
-#print(y)
-print(p)
-one_hot = np.squeeze(np.eye(len(labels), dtype=int)[p])'''
-
-
-#X,y = random.shuffle(X,y)
-#df.set_index('name')
-
-#X_train = X[5:]
-#y_train = y[:-4]
-#y_train = models
-
-#X_test = X[:5]
-#y_test = y[-4:]'''
 
 X_train, X_test,y_train , y_test = train_test_split(X,y, test_size=.4, random_state=42, shuffle=True)
 
-#print(X_train)
-#print(y_train)
 
-#print(X_test)
-#print(y_test)
 
 #RBF SVM
 '''rbf_svm = SVC(gamma=2, C=1)i
@@ -129,12 +113,12 @@ pickle.dump(gp, open("./model_gp.pickle.dat", "wb"))'''
 xg_reg = xgb.XGBClassifier(n_estimators = 10)
 xg_reg.fit(X_train,y_train)
 preds = xg_reg.predict(X_test)
-print(preds)
+#print(preds)
 accuracy = accuracy_score(y_test, preds)
 print("Accuracy of xgb: %f" % (accuracy))
 from sklearn.preprocessing import LabelBinarizer
 lb = LabelBinarizer()
-lb.fit(y_test)
+lb.fit(y_train)
 test = lb.transform(y_test)
 pred = lb.transform(preds)
 print("ROC-AUC score of xgb : %f "% (roc_auc_score(test,pred)))
@@ -145,8 +129,13 @@ feat_imp['feature'] = X_train.columns
 feat_imp.sort_values(by='importance', ascending=False, inplace=True)
 print(feat_imp)
 #print(xg_reg.booster().get_score(importance_type="gain"))
-
-
+print('class mappings :  {}'.format(xg_reg.classes_))
+feat_imp.plot.barh(title='XGBoost Classifier',fontsize=34,figsize=(7,7))
+plt.xlabel('Feature Importance', fontsize=10)
+plt.ylabel('Meta Feature', fontsize=10)
+plt.yticks(fontsize=6)
+plt.xticks(fontsize=8)
+plt.savefig('feature_imp.png')
 
 '''gmm = mixture.GaussianMixture(n_components=16, covariance_type='full').fit(X_train)
 labels = gmm.predict(X_test)
@@ -155,19 +144,59 @@ for l in labels:
     print(df.loc[l+5,'name'])'''
 
 
-f = get_data("../sample_data/challenge/test")
+f = get_data("../../jinu_hpo/AutoDL/sample_data/challenge/test/")
 test_frames=[]
 #for meta_feature in f:
     #test_frames.append(pd.DataFrame.from_dict([meta_feature]))
 test_df = pd.DataFrame.from_dict(f)
 
-#test_df=pd.concatenate(test_frames)
-#test_df = dfa[(dfa.name == "music_genre")]
-print(test_df)
-X_v = test_df[['mean','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13','skew_1','skew_2','skew_3','skew_4','skew_5','skew_6','skew_7','skew_8','skew_9','skew_10','skew_11','skew_12','skew_13','kurtosis_1','kurtosis_2','kurtosis_3','kurtosis_4','kurtosis_5','kurtosis_6','kurtosis_7','kurtosis_8','kurtosis_9','kurtosis_10','kurtosis_11','kurtosis_12','kurtosis_13']]
 
-#X_v = test_df[['mean','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13']]
+print(test_df)
+X_v = test_df[['mean','seq_length','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13','skew_1','skew_2','skew_3','skew_4','skew_5','skew_6','skew_7','skew_8','skew_9','skew_10','skew_11','skew_12','skew_13','kurtosis_1','kurtosis_2','kurtosis_3','kurtosis_4','kurtosis_5','kurtosis_6','kurtosis_7','kurtosis_8','kurtosis_9','kurtosis_10','kurtosis_11','kurtosis_12','kurtosis_13']]
+
 y_v = test_df[['name']]
 print(y_v)
 preds = xg_reg.predict(X_v)
 print(preds)
+best_models = extract_best_model.get_incumbent()
+
+
+
+
+for index,row in y_v.iterrows():
+    dataset = row['name']
+    print(dataset)
+    idx = test_df.loc[(test_df.name == dataset)]
+    x=idx
+    X_v = x[['mean','seq_length','var','skew','kurtosis','mean_1','mean_2','mean_3','mean_4','mean_5','mean_6','mean_7','mean_8','mean_9','mean_10','mean_11','mean_12','mean_13','var_1','var_2','var_3','var_4','var_5','var_6','var_7','var_8','var_9','var_10','var_11','var_12','var_13','skew_1','skew_2','skew_3','skew_4','skew_5','skew_6','skew_7','skew_8','skew_9','skew_10','skew_11','skew_12','skew_13','kurtosis_1','kurtosis_2','kurtosis_3','kurtosis_4','kurtosis_5','kurtosis_6','kurtosis_7','kurtosis_8','kurtosis_9','kurtosis_10','kurtosis_11','kurtosis_12','kurtosis_13']]
+    #y_v = x.loc['name']
+    print(X_v)
+    pred = xg_reg.predict(X_v)
+    prob = xg_reg.predict_proba(X_v)
+    prob = prob.squeeze(axis = 0).tolist()
+    print(prob)
+    import heapq
+    print(heapq.nlargest(2,prob)[1])
+    second_best = prob.index(heapq.nlargest(2,prob)[1])
+    print("second best : {}".format(xg_reg.classes_[second_best]))
+    print("prediction {} ".format(pred[0]))
+    print('dataset {} is similar to dataset {} '.format(dataset,pred[0]))
+    print('running model for dataset {} '.format(dataset))
+    data = extract_best_model.get_incumbent()
+    #data = best_models
+    for d in data:
+        print('checking if {} data matches {}'.format(d['dataset'],dataset))
+        if d['dataset'] == pred[0]:
+            print(d['config'])
+            print(d['model'])
+            cfg = d
+            cfg['dataset_dir']="./data/{}".format(dataset)
+            cfg['dataset']=dataset
+            import bohb_epoch
+            alc = bohb_epoch.execute_run(cfg,d['config'],1200)
+            print('ALC score for dataset {} running model {} is {} '.format(dataset, d['model'],alc))
+            break
+
+
+
+

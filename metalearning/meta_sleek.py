@@ -42,8 +42,8 @@ def extract_mfcc(data,name,sr=16000):
     plt.hist(length,bins=50)
     plt.xlim((0,max(length)))
     plt.savefig("train_before_"+name+".png")'''
-    l = remove_outliers(length)
-    results = [x for x in results if x.shape[0] in l]
+    #l = remove_outliers(length)
+    #results = [x for x in results if x.shape[0] in l]
     return results
 
 
@@ -97,7 +97,7 @@ def get_data_loader(train_features, test_features,batch_size=64):
 
 
 
-def get_meta_features(x_data, d):
+def get_meta_features(x_data, d,max_len):
      print("inside meta features function")
      print("size of each batch :", x_data.shape)
      mean = torch.mean(x_data,0,False)
@@ -150,6 +150,7 @@ def get_meta_features(x_data, d):
      data['var']=var.item()
      data['skew']=skews.item()
      data['kurtosis']=kurtosis.item()
+     data['seq_length']=max_len
      print('stats accross data :')
      print("mean: ",mean.item())
      print("variance: ",var.item())
@@ -164,8 +165,10 @@ def calc_stats(path):
     #dirs = ['flickr','urbansound']
     if "test" in dirs:
         dirs.remove("test")
-    if "espeak-starcraft-words" in dirs:
-        dirs.remove("espeak-starcraft-words")
+    if "starcraft" in dirs:
+        dirs.remove("starcraft")
+    if "flickr" in dirs:
+        dirs.remove("flickr")
     if "oldmes" in dirs:
         dirs.remove("oldmes")
     if "spokenlanguage" in dirs:
@@ -182,7 +185,7 @@ def calc_stats(path):
     row = 0
     col = 0
 
-    heading = ['name','mean','var','skew','kurtosis']#,'sampling_rate','num_train_samples','num_test_samples','output_dim']
+    heading = ['name','seq_length','mean','var','skew','kurtosis']#,'sampling_rate','num_train_samples','num_test_samples','output_dim']
     l = ['mean','var','skew','kurtosis']
     for word in l:
         c =0
@@ -237,7 +240,7 @@ def calc_stats(path):
         
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         x_data = torch.from_numpy(x_data).float().to(device)'''
-        process(train_features, test_features,d,heading,batch_size=512)
+        process(train_features, test_features,d,max_len,heading,batch_size=256)
         
         '''train_loader,test_loader,val_loader = get_data_loader(train_features, test_features, batch_size=64)
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -263,7 +266,7 @@ def calc_stats(path):
             data = get_meta_features(x_data,d)
             write_csv_file(data,heading)
             #data_to_write.append(data)'''
-def process(train_features, test_features, d, heading , batch_size=64):
+def process(train_features, test_features, d, max_len,heading , batch_size=64):
     x_data = np.concatenate((train_features,test_features),axis=0)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     x_data = torch.from_numpy(x_data).float().to(device)
@@ -272,7 +275,7 @@ def process(train_features, test_features, d, heading , batch_size=64):
     batches = torch.split(x_data,batch_size)
     print("batches :", len(batches))
     for x_data in batches:
-        data = get_meta_features(x_data,d) 
+        data = get_meta_features(x_data,d,max_len) 
         write_csv_file([data],heading)
     #return data_to_write
 
@@ -295,20 +298,20 @@ def write_csv_file(data_to_write,heading):
     while row < len(data_to_write):
         col = 0
         line=[]
-        while col < 57:#increase this if u want to add label model_id
+        while col < 58:#increase this if u want to add label model_id
             print(data_to_write[row][heading[col]])
             line.append(str(data_to_write[row][heading[col]]))
             col+=1
         row+=1
         dd.append(line)
-    with open('data_512.csv', mode='a', newline='') as data_file:
+    with open('data_256.csv', mode='a', newline='') as data_file:
         writer = csv.writer(data_file)
         writer.writerows(dd)
 
 
 
 def create_csv_file(heading):
-    with open('data_512.csv', mode='w+') as data_file:
+    with open('data_256.csv', mode='w+') as data_file:
             writer = csv.writer(data_file)
             writer.writerow(heading)
 '''

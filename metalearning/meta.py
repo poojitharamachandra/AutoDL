@@ -28,8 +28,8 @@ def extract_mfcc(data,name,sr=16000):
         r = r.transpose()
         length.append(r.shape[0])
         results.append(r)
-    l = remove_outliers(length)
-    results = [x for x in results if x.shape[0] in l]
+    #l = remove_outliers(length)
+    #results = [x for x in results if x.shape[0] in l]
     return results
 
 
@@ -83,7 +83,7 @@ def get_data_loader(train_features, test_features,batch_size=64):
 
 
 
-def get_meta_features(x_data, d):
+def get_meta_features(x_data, d,max_len):
      print("inside meta features function")
      print("size of each batch :", x_data.shape)
      mean = torch.mean(x_data,0,False)
@@ -136,6 +136,7 @@ def get_meta_features(x_data, d):
      data['var']=var.item()
      data['skew']=skews.item()
      data['kurtosis']=kurtosis.item()
+     data['seq_length']=max_len
      print('stats accross data :')
      print("mean: ",mean.item())
      print("variance: ",var.item())
